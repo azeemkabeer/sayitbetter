@@ -12,6 +12,9 @@ import {
   Flame,
   Mic,
   MicOff,
+  ClipboardPaste,
+  HelpCircle,
+  Check,
 } from 'lucide-react';
 import { Recipient, Personality, RewriteResponse, MascotState, SarcasmLevel } from './lib/types';
 import { RECIPIENTS, PERSONALITIES, STARTER_SCENARIOS, StarterScenario, SARCASM_LEVELS } from './lib/constants';
@@ -22,6 +25,8 @@ import { SafetyBanner } from './components/SafetyBanner';
 import { WelcomeGuide } from './components/WelcomeGuide';
 import { SarcasmMeter } from './components/SarcasmMeter';
 import { SubtextRadar } from './components/SubtextRadar';
+import { ChatIntegrationsModal } from './components/ChatIntegrationsModal';
+import { cleanChatImport } from './lib/chat-integrations';
 
 const LOCAL_STORAGE_GUIDE_KEY = 'say_it_better_welcome_seen';
 
@@ -60,6 +65,8 @@ export default function App() {
 
   // Welcome modal state
   const [showWelcome, setShowWelcome] = useState(false);
+  // WhatsApp / Instagram chat info modal
+  const [showChatInfo, setShowChatInfo] = useState(false);
 
   // Ref for auto-scrolling to results
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -189,13 +196,69 @@ export default function App() {
     }
   };
 
-  // Handle paste with accessible truncation notice
+  // Handle paste with smart chat cleanup & truncation notice
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pastedText = e.clipboardData.getData('text');
+    const { cleanedText, wasCleaned, detectedSender } = cleanChatImport(pastedText);
+
+    if (wasCleaned) {
+      e.preventDefault();
+      setDraft((prev) => {
+        const combined = prev ? `${prev} ${cleanedText}` : cleanedText;
+        return combined.slice(0, 400);
+      });
+      setMascotState('thinking');
+      setCustomStickerText('CLEANED!');
+      setPasteNotice(
+        detectedSender
+          ? `Imported from ${detectedSender}! Stripped chat timestamps and headers.`
+          : 'Imported from chat! Stripped timestamp & contact header.'
+      );
+      setTimeout(() => setPasteNotice(null), 4000);
+      return;
+    }
+
     const currentLength = draft.length;
     if (currentLength + pastedText.length > 400) {
       setPasteNotice('Pasted text was trimmed to fit within the 400-character limit.');
       setTimeout(() => setPasteNotice(null), 3500);
+    }
+  };
+
+  // 1-Click Clipboard Import for WhatsApp & Instagram
+  const handleChatImport = async () => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        setPasteNotice('Clipboard reading is restricted by your browser. Please paste directly using Ctrl+V or Cmd+V.');
+        setTimeout(() => setPasteNotice(null), 4000);
+        return;
+      }
+      const rawText = await navigator.clipboard.readText();
+      if (!rawText || rawText.trim().length === 0) {
+        setPasteNotice('Your clipboard is empty! Copy a message from WhatsApp or Instagram first.');
+        setTimeout(() => setPasteNotice(null), 4000);
+        return;
+      }
+
+      const { cleanedText, wasCleaned, detectedSender } = cleanChatImport(rawText);
+      setDraft(cleanedText.slice(0, 400));
+      setError(null);
+      setMascotState('thinking');
+      setCustomStickerText('IMPORTED!');
+
+      if (wasCleaned) {
+        setPasteNotice(
+          detectedSender
+            ? `Imported message from ${detectedSender}! Stripped timestamps and headers.`
+            : 'Imported from chat! Cleaned timestamps & headers.'
+        );
+      } else {
+        setPasteNotice('Imported text directly from clipboard!');
+      }
+      setTimeout(() => setPasteNotice(null), 4000);
+    } catch {
+      setPasteNotice('Clipboard permission was not granted. Please paste directly with Ctrl+V or Cmd+V.');
+      setTimeout(() => setPasteNotice(null), 4000);
     }
   };
 
@@ -336,6 +399,12 @@ export default function App() {
         onTrySample={handleSelectScenario}
       />
 
+      {/* WhatsApp & Instagram Feasibility / Integration Modal */}
+      <ChatIntegrationsModal
+        isOpen={showChatInfo}
+        onClose={() => setShowChatInfo(false)}
+      />
+
       {/* Main App Container */}
       <div className="w-full max-w-4xl mx-auto px-4 py-4 md:py-8 flex-1">
         {/* Neon Header Bar */}
@@ -358,6 +427,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowChatInfo(true)}
+              type="button"
+              title="Learn about WhatsApp and Instagram integration feasibility"
+              className="cursor-pointer px-3 py-1.5 rounded-xl bg-[#121118] text-[#CCFF00] hover:bg-[#2D2B36] transition-all shadow-[2px_2px_0px_#000000] active:translate-x-[1px] active:translate-y-[1px] flex items-center gap-1.5 text-xs font-black"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">WhatsApp/IG Info</span>
+            </button>
+
             <button
               onClick={handleRollRandomGoofy}
               type="button"
@@ -433,16 +512,29 @@ export default function App() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Step 1: Draft Textarea */}
             <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <label
-                  htmlFor="draft-message"
-                  className="font-black text-sm uppercase tracking-wider text-[#CCFF00] flex items-center gap-2"
-                >
-                  <span className="w-5 h-5 rounded-full bg-[#CCFF00] text-[#121118] flex items-center justify-center text-xs font-black">
-                    1
-                  </span>
-                  Your Raw Message Draft
-                </label>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-3">
+                  <label
+                    htmlFor="draft-message"
+                    className="font-black text-sm uppercase tracking-wider text-[#CCFF00] flex items-center gap-2"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-[#CCFF00] text-[#121118] flex items-center justify-center text-xs font-black">
+                      1
+                    </span>
+                    Your Raw Message Draft
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowChatInfo(true)}
+                    className="cursor-pointer text-[11px] font-bold text-[#A1A1AA] hover:text-[#CCFF00] flex items-center gap-1 transition-colors"
+                    title="Learn about WhatsApp & Instagram integration feasibility"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    <span>WhatsApp / IG Info</span>
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-2">
                   {trimmedLength > 0 && trimmedLength < 5 && (
                     <span className="text-xs font-bold text-[#FF5555]">
@@ -473,8 +565,35 @@ export default function App() {
                   className="w-full p-4 pb-14 rounded-2xl border-2 border-[#383644] bg-[#18171E] text-white text-base placeholder:text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#CCFF00] focus:border-[#CCFF00] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.4)] resize-y transition-all leading-relaxed"
                 />
 
-                {/* Floating Microphone Dictation Button */}
-                <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                {/* Floating Toolbar: Import, Dictate, Clear */}
+                <div className="absolute right-3 bottom-3 flex flex-wrap items-center gap-2">
+                  {draft.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft('');
+                        setPasteNotice(null);
+                        setCustomStickerText('CLEARED');
+                      }}
+                      aria-label="Clear draft text"
+                      className="cursor-pointer px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#18171E] hover:bg-[#282733] text-[#A1A1AA] hover:text-white border border-[#383644] transition-all"
+                    >
+                      Clear
+                    </button>
+                  )}
+
+                  {/* 1-Tap Paste from Chat */}
+                  <button
+                    type="button"
+                    onClick={handleChatImport}
+                    title="Paste message from WhatsApp or Instagram clipboard (auto-cleans timestamps & headers)"
+                    className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-[#282633] hover:bg-[#383547] text-[#CCFF00] border-2 border-[#121118] shadow-[2px_2px_0px_#000000] active:translate-x-[1px] active:translate-y-[1px] transition-all"
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5" />
+                    <span>Paste Chat</span>
+                  </button>
+
+                  {/* Floating Microphone Dictation Button */}
                   <button
                     type="button"
                     onClick={toggleSpeechRecognition}
@@ -488,12 +607,12 @@ export default function App() {
                     {isListening ? (
                       <>
                         <MicOff className="w-3.5 h-3.5 animate-bounce" />
-                        <span>Listening... (Tap to Stop)</span>
+                        <span>Listening...</span>
                       </>
                     ) : (
                       <>
                         <Mic className="w-3.5 h-3.5" />
-                        <span>Dictate (Voice)</span>
+                        <span>Dictate</span>
                       </>
                     )}
                   </button>

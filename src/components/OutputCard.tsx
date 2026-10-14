@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Check, Copy, Sparkles, Send, Flame, ShieldAlert, MessageCircle, CornerDownRight, Wand2 } from 'lucide-react';
+import { Check, Copy, Sparkles, Send, Flame, ShieldAlert, MessageCircle, CornerDownRight, Wand2, Share2, ExternalLink } from 'lucide-react';
 import { RewriteCard, Recipient } from '../lib/types';
 import { RECIPIENTS } from '../lib/constants';
+import { sendToWhatsApp, openInstagramDirect, triggerNativeShare } from '../lib/chat-integrations';
 
 interface OutputCardProps {
   card: RewriteCard;
@@ -21,9 +22,15 @@ export const OutputCard: React.FC<OutputCardProps> = ({
   const [copied, setCopied] = useState(false);
   const [currentText, setCurrentText] = useState(card.text);
   const [activeTweak, setActiveTweak] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   // Recipient info for the simulator
   const recipientInfo = RECIPIENTS.find((r) => r.id === recipient) || RECIPIENTS[0];
+
+  const showNotice = (msg: string) => {
+    setActionNotice(msg);
+    setTimeout(() => setActionNotice(null), 4000);
+  };
 
   const handleCopy = async () => {
     try {
@@ -42,11 +49,36 @@ export const OutputCard: React.FC<OutputCardProps> = ({
       }
       setCopied(true);
       onCopyTrigger(card.id);
+      showNotice('Copied message to clipboard!');
       setTimeout(() => setCopied(false), 2400);
     } catch {
       setCopied(true);
       onCopyTrigger(card.id);
       setTimeout(() => setCopied(false), 2400);
+    }
+  };
+
+  const handleWhatsApp = () => {
+    sendToWhatsApp(currentText);
+    onCopyTrigger(card.id);
+    showNotice('Opening WhatsApp with message loaded into chat box!');
+  };
+
+  const handleInstagram = async () => {
+    const res = await openInstagramDirect(currentText);
+    onCopyTrigger(card.id);
+    showNotice(
+      res.copied
+        ? 'Copied to clipboard! Switched to Instagram Direct — just paste into your chat.'
+        : 'Opening Instagram Direct...'
+    );
+  };
+
+  const handleShare = async () => {
+    const shared = await triggerNativeShare('Say It Better rewrite', currentText);
+    if (shared) {
+      onCopyTrigger(card.id);
+      showNotice('Shared message!');
     }
   };
 
@@ -261,33 +293,90 @@ export const OutputCard: React.FC<OutputCardProps> = ({
       </div>
 
       {/* Footer Actions */}
-      <div className="mt-4 pt-3 flex items-center justify-between border-t border-[#34323F]">
-        <div className="text-xs font-bold text-[#A1A1AA]">
-          {currentText.length} chars • {currentText.trim().split(/\s+/).length} words
+      <div className="mt-4 pt-3 border-t border-[#34323F] space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-[#A1A1AA]">
+          <span>
+            {currentText.length} chars • {currentText.trim().split(/\s+/).length} words
+          </span>
+          <span className="text-[11px] text-[#A1A1AA] flex items-center gap-1 font-mono">
+            <ExternalLink className="w-3 h-3 text-[#CCFF00]" />
+            Direct Export to Chat:
+          </span>
         </div>
 
-        <button
-          onClick={handleCopy}
-          type="button"
-          aria-label={copied ? 'Copied to clipboard' : 'Copy message text'}
-          className={`cursor-pointer inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm border-2 border-[#121118] transition-all duration-150 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none ${
-            copied
-              ? 'bg-[#CCFF00] text-[#121118] shadow-[2px_2px_0px_#000000]'
-              : 'bg-[#BFA2F8] hover:bg-[#D8B4FE] text-[#121118] shadow-[3px_3px_0px_#000000]'
-          }`}
-        >
-          {copied ? (
-            <>
-              <Check className="w-4 h-4 stroke-[3]" />
-              <span>COPIED!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-4 h-4 stroke-[2.5]" />
-              <span>Copy Message</span>
-            </>
+        {/* Action Buttons Row */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 1-Tap Copy */}
+          <button
+            onClick={handleCopy}
+            type="button"
+            aria-label={copied ? 'Copied to clipboard' : 'Copy message text'}
+            className={`cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-xs sm:text-sm border-2 border-[#121118] transition-all duration-150 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none ${
+              copied
+                ? 'bg-[#CCFF00] text-[#121118] shadow-[2px_2px_0px_#000000]'
+                : 'bg-[#BFA2F8] hover:bg-[#D8B4FE] text-[#121118] shadow-[2.5px_2.5px_0px_#000000]'
+            }`}
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                <span>COPIED!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+
+          {/* Send directly to WhatsApp */}
+          <button
+            onClick={handleWhatsApp}
+            type="button"
+            title="Open WhatsApp with this message pre-filled directly in chat"
+            className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm bg-[#25D366] hover:bg-[#20bd5a] text-[#121118] border-2 border-[#121118] shadow-[2.5px_2.5px_0px_#000000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
+          >
+            <svg className="w-4 h-4 fill-[#121118]" viewBox="0 0 24 24">
+              <path d="M17.472 14.382c-.301-.15-1.78-.879-2.056-.98-.276-.1-.476-.15-.676.15-.2.301-.776.98-.952 1.18-.176.2-.351.226-.652.075-.301-.15-1.272-.469-2.423-1.496-.896-.799-1.501-1.786-1.677-2.087-.176-.301-.019-.464.132-.614.136-.135.301-.351.451-.527.15-.176.201-.301.301-.502.1-.2.05-.376-.025-.527-.075-.15-.677-1.632-.927-2.234-.244-.587-.492-.507-.676-.516l-.577-.01c-.2 0-.526.075-.802.376-.276.301-1.053 1.029-1.053 2.509 0 1.48 1.078 2.91 1.228 3.111.15.201 2.122 3.24 5.14 4.544.718.31 1.278.496 1.716.635.722.23 1.379.197 1.9.12.58-.088 1.78-.727 2.03-1.43.25-.702.25-1.304.175-1.43-.075-.125-.276-.2-.577-.35zM12.04 2C6.516 2 2.028 6.488 2.028 12.012c0 1.895.53 3.664 1.448 5.184L2 22l4.944-1.425a9.96 9.96 0 0 0 5.096 1.397c5.524 0 10.012-4.488 10.012-10.012C22.052 6.488 17.564 2 12.04 2z" />
+            </svg>
+            <span>WhatsApp</span>
+          </button>
+
+          {/* Switch to Instagram Direct */}
+          <button
+            onClick={handleInstagram}
+            type="button"
+            title="Copy and switch directly to Instagram Direct Inbox"
+            className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] text-white border-2 border-[#121118] shadow-[2.5px_2.5px_0px_#000000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
+          >
+            <svg className="w-4 h-4 fill-white" viewBox="0 0 24 24">
+              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+            </svg>
+            <span>Instagram</span>
+          </button>
+
+          {/* OS Share Sheet */}
+          {typeof navigator !== 'undefined' && 'share' in navigator && (
+            <button
+              onClick={handleShare}
+              type="button"
+              title="Share with other apps"
+              className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs bg-[#18171E] hover:bg-[#282733] text-[#D1D5DB] border border-[#383644] transition-all ml-auto"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share</span>
+            </button>
           )}
-        </button>
+        </div>
+
+        {/* Action Notice Toast */}
+        {actionNotice && (
+          <div className="text-xs font-bold text-[#121118] bg-[#CCFF00] border-2 border-[#121118] p-2.5 rounded-xl shadow-[2px_2px_0px_#000000] flex items-center gap-2 animate-in fade-in duration-200">
+            <Check className="w-4 h-4 stroke-[3] shrink-0" />
+            <span>{actionNotice}</span>
+          </div>
+        )}
       </div>
     </div>
   );
