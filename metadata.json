@@ -1,0 +1,6 @@
+{
+  "name": "Say It Better",
+  "description": "Calibrate raw, difficult, or petty messages into three distinct versions: Ready to Send, Funnier Alternative, and Full Personality Mode.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

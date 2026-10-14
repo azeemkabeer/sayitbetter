@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .shadow-neo-black {
+    box-shadow: 4px 4px 0px #000000;
+  }
+  .shadow-neo-lime {
+    box-shadow: 4px 4px 0px #CCFF00;
+  }
+  .shadow-neo-purple {
+    box-shadow: 4px 4px 0px #9333EA;
+  }
+  .shadow-neo-sm {
+    box-shadow: 2px 2px 0px #000000;
+  }
+  .shadow-neo-lg {
+    box-shadow: 6px 6px 0px #000000;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #18171E;
+}
+::-webkit-scrollbar-thumb {
+  background: #2D2B36;
+  border-radius: 4px;
+  border: 2px solid #18171E;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #CCFF00;
+}
